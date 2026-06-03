@@ -1,0 +1,8 @@
+streamlit
+torch
+biopython
+pandas
+numpy
+scikit-learn
+scipy
+matplotlib
