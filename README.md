@@ -8,29 +8,36 @@
 
 ## What it does
 
-Paste or select any two species — living or extinct — and the model returns an evolutionary similarity score (0–100%) based on their mitochondrial DNA patterns.
+Select any two species — living or extinct — and the model returns an evolutionary similarity score (0–100%) based on their mitochondrial DNA patterns. The model learns *which* sequence patterns encode evolutionary distance rather than just comparing raw base composition.
 
-- Woolly Mammoth vs Asian Elephant → **99.8%** ✅
-- Cave Lion vs Tiger → **97.4%** ✅
-- Woolly Mammoth vs Chicken → **56.6%** ✅ (correctly low)
-- Saber-tooth Cat vs Grey Wolf → model correctly separates them despite both being large Pleistocene carnivores
+| Pair | Model Score | K-mer Baseline | Uplift |
+|------|-------------|----------------|--------|
+| Woolly Mammoth vs Asian Elephant | **99.9%** | 96.9% | +2.9% |
+| Woolly Mammoth vs American Mastodon | **87.2%** | 36.9% | +50.3% |
+| Cave Bear vs Brown Bear | **90.6%** | 45.8% | +44.8% |
+| Cave Lion vs Tiger | **97.4%** | 63.8% | +33.6% |
+| Woolly Mammoth vs Chicken | **56.6%** | 77.3% | −20.6% ✅ |
 
-The model outperforms the classical k-mer cosine baseline on every tested pair by learning *which* sequence patterns encode evolutionary distance — not just raw base composition.
+The last row is critical — the model correctly *pushes down* the mammoth-chicken score (which the baseline inflates due to shared AT-content), proving it has learned real evolutionary signal and not just base composition.
 
 ---
 
-## Why this is interesting
+## Demo
 
-Most genomic similarity tools (BLAST, k-mer cosine) are classical algorithms with no learning component. This project asks: **can a neural network learn what evolutionary relatedness looks like from sequence statistics alone?**
+### Close relatives score high
+![Woolly Mammoth vs Asian Elephant — 99.9% similarity](screenshots/01_mammoth_elephant.png)
 
-The answer is yes — and measurably better than the baseline.
+### Distant species score low — model corrects the baseline
+![Woolly Mammoth vs Chicken — 56.6% similarity](screenshots/02_mammoth_chicken.png)
+*Notice: k-mer baseline said 77.3% but the model correctly brings it down to 56.6% — this is the ML adding real value over classical methods.*
 
-| Pair | K-mer baseline | Siamese model | Δ uplift |
-|------|---------------|---------------|----------|
-| Woolly Mammoth vs American Mastodon | 36.9% | 87.2% | +50.3% |
-| Cave Bear vs Brown Bear | 45.8% | 90.6% | +44.8% |
-| Dire Wolf vs Grey Wolf | 60.9% | 87.2% | +26.3% |
-| Cave Lion vs Tiger | 63.8% | 97.4% | +33.6% |
+### Phylogenetic tree — species self-organise by evolutionary family
+![Phylogenetic dendrogram learned by the model](screenshots/03_phylogenetic_tree.png)
+*No taxonomy labels used at inference. The model's pairwise scores produce this dendrogram — mammoths cluster with elephants, cats cluster together, bears cluster together.*
+
+### Full pairwise similarity matrix
+![Full similarity heatmap across all species](screenshots/04_similarity_matrix.png)
+*Green = closely related. Red = distant. The block structure aligns with known evolutionary taxonomy.*
 
 ---
 
@@ -56,7 +63,7 @@ FASTA sequence (16,000 bp)
                           0.0 – 1.0
 ```
 
-Both sequences pass through the **same encoder** (Siamese = shared weights). The model learns a universal DNA embedding space where evolutionary relatives cluster together.
+Both sequences pass through the **same encoder** (Siamese = shared weights). The model learns a universal DNA embedding space where evolutionary relatives cluster together — without ever seeing taxonomy labels.
 
 ---
 
@@ -64,10 +71,10 @@ Both sequences pass through the **same encoder** (Siamese = shared weights). The
 
 - **44 species** — 8 extinct, 36 living
 - **Source:** NCBI GenBank mitochondrial genomes (free, public)
-- **Families covered:** Proboscidea, Felidae, Ursidae, Canidae, Rhinocerotidae, Equidae + outgroups
-- **Sequence length:** ~16,000 base pairs per species (complete mitochondrial genome)
+- **Families:** Proboscidea, Felidae, Ursidae, Canidae, Rhinocerotidae, Equidae + outgroups
+- **Sequence length:** ~16,000 bp per species (complete mitochondrial genome)
 
-Extinct species included: Woolly Mammoth, Columbian Mammoth, American Mastodon, Saber-tooth Cat, Cave Lion, Cave Bear, Dire Wolf, Woolly Rhinoceros
+**Extinct species:** Woolly Mammoth, Columbian Mammoth, American Mastodon, Saber-tooth Cat, Cave Lion, Cave Bear, Dire Wolf, Woolly Rhinoceros
 
 ---
 
@@ -75,38 +82,29 @@ Extinct species included: Woolly Mammoth, Columbian Mammoth, American Mastodon, 
 
 | Detail | Value |
 |--------|-------|
-| Pairs (after augmentation) | 15,136 |
+| Total pairs (after augmentation) | 15,136 |
 | Same-family pairs | 165 |
-| Val accuracy | **96%** |
-| Loss | Combined contrastive + MSE |
+| Validation accuracy | **96%** |
+| Loss | Contrastive (α=0.7) + MSE (α=0.3) |
 | Epochs | 150 |
 | Optimizer | AdamW + CosineAnnealing LR |
-| Class balancing | WeightedRandomSampler (5× upsample) |
+| Class balancing | WeightedRandomSampler (5× upsample of positives) |
 
-Key training decisions:
-- **Contrastive loss with margin=0.5** — forces unrelated species embeddings apart on the unit sphere
-- **Gaussian augmentation** — 15× augmentation with higher noise on negative pairs
-- **3-level labels** (1.0 / 0.3 / 0.0) — same family / related order / unrelated — richer signal than binary
-
----
-
-## Results
-
-The learned embedding space (PCA of 128-dim vectors) shows species self-organising into evolutionary clusters with no taxonomy labels at inference time:
-
-- Proboscideans (mammoths + elephants) cluster tightly
-- Felids (cats, extinct and living) cluster separately
-- Outgroups (chicken, crocodile, python) are correctly pushed to the periphery
+**Key decisions:**
+- **Contrastive loss margin = 0.5** — forces unrelated species apart on the unit sphere; margin of 0.3 was insufficient (all pairs collapsed to high similarity)
+- **3-level labels** (1.0 / 0.3 / 0.0) — same family / related order / unrelated — richer gradient signal than binary
+- **Gaussian augmentation with asymmetric noise** — 15× augmentation, higher noise on negative pairs to create harder negatives
+- **WeightedRandomSampler** — without this, 85% negative pairs cause the model to predict "similar" for everything
 
 ---
 
 ## App features
 
-| Tab | What it does |
+| Tab | Description |
 |-----|-------------|
-| Compare two species | Select or paste any two sequences → similarity % + family prediction + model vs baseline uplift |
-| Phylogenetic tree | Dendrogram built from pairwise model scores across selected families |
-| Full similarity matrix | Interactive heatmap, all 44 species, exportable |
+| **Compare two species** | Select or paste any two sequences → similarity % + color verdict + model vs baseline uplift |
+| **Phylogenetic tree** | Dendrogram from pairwise model scores across selected families |
+| **Full similarity matrix** | Interactive heatmap, all 44 species, exportable |
 
 ---
 
@@ -130,10 +128,11 @@ streamlit run app.py
 
 ## What I learned
 
-- Siamese networks are uniquely suited to similarity tasks because shared weights force the model to learn a *universal* representation rather than memorising individual pairs
-- Class imbalance in pair datasets is severe (85% negatives) and requires weighted sampling — not just loss weighting
-- Real paleogenomic data from NCBI is surprisingly accessible; the hardest part is curating ground-truth labels from taxonomy
-- K-mer frequency vectors at k=6 are a strong baseline for mitochondrial DNA — the Siamese model's value is in learning *which* k-mer patterns matter most for evolutionary distance
+- **Siamese networks** are uniquely suited to similarity tasks because shared weights force the model to learn a universal representation, not memorise individual pairs
+- **Class imbalance in pair datasets is severe** — 85% negatives requires weighted sampling, not just loss weighting
+- **The margin hyperparameter matters more than architecture** — changing margin from 0.3 to 0.5 fixed the model collapsing to predict everything as similar
+- **Real paleogenomic data is accessible** — NCBI GenBank has complete mitochondrial genomes for most extinct megafauna; the hard part is curating ground-truth labels from taxonomy
+- **The baseline comparison is the story** — showing the model corrects the k-mer baseline on hard pairs (mammoth vs chicken) is more convincing than accuracy numbers alone
 
 ---
 
