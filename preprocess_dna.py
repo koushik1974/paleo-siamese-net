@@ -19,13 +19,6 @@ def get_all_kmers(k):
     return [''.join(p) for p in product('ATGC', repeat=k)]
 
 def sequence_to_kmer_vector(sequence, k=6):
-    """
-    Sliding window of size k over the sequence.
-    Returns L1-normalized frequency array of shape (4^k,).
-
-    Why L1 normalize? So two sequences of different lengths are still
-    comparable — we care about *patterns*, not raw counts.
-    """
     sequence = sequence.upper().replace('N', '')  
     kmers = get_all_kmers(k)
     kmer_index = {km: i for i, km in enumerate(kmers)}
