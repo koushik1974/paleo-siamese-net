@@ -1,7 +1,4 @@
 """
-Expanded species download — targets 35+ species for better model training.
-Run this, then re-run preprocess_dna.py and siamese_dna_v2.py.
-
 pip install biopython
 python download_more_species.py
 """
