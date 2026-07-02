@@ -1,11 +1,3 @@
-"""
-Stage 5: Streamlit Demo App — Extinct Animal DNA Similarity
-===========================================================
-Install: pip install streamlit torch biopython pandas numpy scikit-learn scipy matplotlib
-Run:     streamlit run app.py
-Deploy:  push to GitHub → connect on streamlit.io (free)
-"""
-
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -35,7 +27,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Model definition (must match training) ───────────────────────────────────
+# ── Model definition  ───────────────────────────────────
 class DNAEncoder(nn.Module):
     def __init__(self, input_dim=4096, embed_dim=128):
         super().__init__()
@@ -67,7 +59,7 @@ def load_model_and_data():
 
 model, vectors, species_list = load_model_and_data()
 
-# ── K-mer helper (for pasting raw sequences) ─────────────────────────────────
+# ── K-mer helper ─────────────────────────────────
 def seq_to_vector(sequence, k=6):
     sequence = re.sub(r'[^ATGC]', '', sequence.upper())
     kmers = [''.join(p) for p in product('ATGC', repeat=k)]
@@ -125,15 +117,14 @@ def score_label(s):
 
 def format_name(n): return n.replace("_", " ").title()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# UI
-# ─────────────────────────────────────────────────────────────────────────────
+#UI
+
 st.title("🦣 Extinct Animal DNA Similarity")
 st.caption("A Siamese neural network trained on mitochondrial DNA from NCBI GenBank")
 
 tab1, tab2, tab3 = st.tabs(["🔬 Compare two species", "🌳 Phylogenetic tree", "📊 Full similarity matrix"])
 
-# ── Tab 1: Compare ────────────────────────────────────────────────────────────
+# ──Compare ────────────────────────────────────────────────────────────
 with tab1:
     mode = st.radio("Input mode", ["Choose from database", "Paste raw DNA sequence"], horizontal=True)
     st.divider()
@@ -196,7 +187,7 @@ with tab1:
                 + ("belong to the **same evolutionary family**." if same else "belong to **different families**.")
             )
 
-# ── Tab 2: Phylogenetic tree ───────────────────────────────────────────────────
+# ── Phylogenetic tree ───────────────────────────────────────────────────
 with tab2:
     st.subheader("Phylogenetic dendrogram — learned by the model")
     st.caption("Computed from pairwise Siamese similarity scores across all species in the database")
@@ -265,7 +256,7 @@ with tab2:
         st.pyplot(fig, use_container_width=True)
         st.caption("Species that cluster together are predicted to share evolutionary ancestry. Leaf colors = taxonomic family. 🦴 = extinct species.")
 
-# ── Tab 3: Full matrix ────────────────────────────────────────────────────────
+# ──Full matrix ────────────────────────────────────────────────────────
 with tab3:
     st.subheader("Pairwise similarity matrix")
     fam_filter = st.multiselect("Filter families", list(FAMILY_COLORS.keys()),
