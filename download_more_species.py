@@ -9,19 +9,17 @@ python download_more_species.py
 from Bio import Entrez, SeqIO
 import time, os
 
-Entrez.email = "your_email@example.com"   # <-- change this
+Entrez.email = "your_email@example.com"   
 
-# Expanded species list — grouped by family so you can see the training signal
 SPECIES = {
-    # ── PROBOSCIDEA (elephants/mammoths) ─────────────────────────────────────
+
     "woolly_mammoth":        "NC_007596",
     "columbian_mammoth":     "NC_015529",
     "american_mastodon":     "NC_005993",
     "asian_elephant":        "NC_005129",
     "african_savanna_elephant": "NC_000934",
-    "african_forest_elephant":  "NC_011632",  # distinct from savanna
+    "african_forest_elephant":  "NC_011632",  
 
-    # ── FELIDAE (cats) ────────────────────────────────────────────────────────
     "saber_tooth_cat":       "NC_023082",
     "cave_lion":             "NC_043312",
     "tiger":                 "NC_010641",
@@ -32,7 +30,7 @@ SPECIES = {
     "cougar":                "NC_016422",
     "domestic_cat":          "NC_001700",
 
-    # ── URSIDAE (bears) ───────────────────────────────────────────────────────
+
     "cave_bear":             "NC_011112",
     "brown_bear":            "NC_003218",
     "polar_bear":            "NC_023722",
@@ -40,27 +38,26 @@ SPECIES = {
     "giant_panda":           "NC_009492",
     "sun_bear":              "NC_009324",
 
-    # ── CANIDAE (wolves/dogs) ─────────────────────────────────────────────────
     "dire_wolf":             "NC_058792",
     "grey_wolf":             "NC_008093",
     "domestic_dog":          "NC_002008",
-    "coyote":                "NC_008093",   # closest public proxy
+    "coyote":                "NC_008093",   
     "african_wild_dog":      "NC_008440",
     "dhole":                 "NC_008442",
 
-    # ── RHINOCEROTIDAE ────────────────────────────────────────────────────────
+
     "woolly_rhinoceros":     "NC_012681",
     "white_rhinoceros":      "NC_001808",
-    "black_rhinoceros":      "NC_001808",   # use white as proxy if unavailable
+    "black_rhinoceros":      "NC_001808",   
     "indian_rhinoceros":     "NC_001779",
     "sumatran_rhinoceros":   "NC_012684",
 
-    # ── EQUIDAE (horses) ─────────────────────────────────────────────────────
+
     "horse":                 "NC_001640",
     "donkey":                "NC_001788",
     "plains_zebra":          "NC_004394",
 
-    # ── DISTANT OUTGROUPS (should score LOW vs everything above) ─────────────
+
     "human":                 "NC_012920",
     "bottlenose_dolphin":    "NC_012059",
     "blue_whale":            "NC_001601",
