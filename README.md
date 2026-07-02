@@ -10,7 +10,7 @@
 
 Select any two species — living or extinct — and the model returns an evolutionary similarity score (0–100%) based on their mitochondrial DNA patterns. The model learns *which* sequence patterns encode evolutionary distance rather than just comparing raw base composition.
 
-| Pair | Model Score | K-mer Baseline | Uplift |
+| Pair | Predicted Similarity (%) | K-mer Baseline (%) | Δ vs Baseline |
 |------|-------------|----------------|--------|
 | Woolly Mammoth vs Asian Elephant | **99.9%** | 96.9% | +2.9% |
 | Woolly Mammoth vs American Mastodon | **87.2%** | 36.9% | +50.3% |
