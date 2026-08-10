@@ -57,10 +57,13 @@ FAMILY_COLORS = {
 
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 html, body, [class*="css"] {{
-    font-family: 'Inter', sans-serif;
+    font-family: 'IBM Plex Mono', monospace;
+}}
+h1, h2, h3, h4, h5, h6, p, span, div, label, button, input, textarea, select {{
+    font-family: 'IBM Plex Mono', monospace !important;
 }}
 .stApp {{
     background:
@@ -74,7 +77,7 @@ html, body, [class*="css"] {{
 
 /* ── Type scale ────────────────────────────────────────────────────────── */
 h1, h2, h3 {{
-    font-family: 'Fraunces', serif !important;
+    font-family: 'IBM Plex Mono', monospace !important;
     color: {BONE} !important;
     letter-spacing: -0.01em;
 }}
@@ -96,19 +99,19 @@ p, span, div, label {{ color: {BONE}; }}
     justify-content: space-between;
 }}
 .specimen-title {{
-    font-family: 'Fraunces', serif;
-    font-weight: 600;
-    font-size: 2.6rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    font-size: 2.3rem;
     color: {BONE};
     margin: 0 0 0.15rem 0;
-    line-height: 1.1;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
 }}
 .specimen-sub {{
-    font-family: 'Fraunces', serif;
-    font-style: italic;
+    font-family: 'IBM Plex Mono', monospace;
     font-weight: 400;
     color: {MUTED};
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     margin-bottom: 1.6rem;
 }}
 
@@ -189,9 +192,8 @@ p, span, div, label {{ color: {BONE}; }}
 }}
 .spec-verdict {{
     text-align: center;
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-size: 1.15rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.05rem;
     margin-top: 0.6rem;
     color: {BONE};
 }}
@@ -430,7 +432,7 @@ with tab1:
             same = FAMILY.get(s1,"?") == FAMILY.get(s2,"?")
             st.write("")
             st.markdown(f"""
-            <div style="border-left:2px solid {AMBER};padding:0.7rem 1rem;background:{BG_PANEL_2};font-family:'Inter',sans-serif;color:{BONE}">
+            <div style="border-left:2px solid {AMBER};padding:0.7rem 1rem;background:{BG_PANEL_2};font-family:'IBM Plex Mono',monospace;color:{BONE}">
             <b>{format_name(s1)}</b> <span style="color:{MUTED}">({FAMILY.get(s1,'?')})</span> and
             <b>{format_name(s2)}</b> <span style="color:{MUTED}">({FAMILY.get(s2,'?')})</span>
             {"belong to the <b style='color:%s'>same evolutionary family</b>." % MOSS if same else "belong to <b style='color:%s'>different families</b>." % RUST}
