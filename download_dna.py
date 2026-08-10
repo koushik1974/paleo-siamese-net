@@ -9,7 +9,7 @@ import time
 import os
 
 # NCBI requires your email (they won't spam you, just for rate limiting)
-Entrez.email = "bathulakoushikyadav@gmail.com"  # <-- change this
+Entrez.email = "bathulakoushikyadav@gmail.com"  
 
 # ─── Accession numbers ────────────────────────────────────────────────────────
 # Mitochondrial genomes (complete, ~16,000 bases each)

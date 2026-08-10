@@ -9,7 +9,7 @@ python download_more_species.py
 from Bio import Entrez, SeqIO
 import time, os
 
-Entrez.email = "your_email@example.com"   # <-- change this
+Entrez.email = "your_email@example.com"  
 
 # Expanded species list — grouped by family so you can see the training signal
 SPECIES = {

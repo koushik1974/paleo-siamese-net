@@ -12,30 +12,244 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from itertools import product, combinations
+from itertools import product
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
+from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import os, re
+import hashlib
+import re
 
-# ── Page config ───────────────────────────────────────────────────────────────
+# ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Extinct Animal DNA Similarity",
-    page_icon="🦣",
+    page_title="Specimen Comparator — Extinct Animal DNA",
+    page_icon="🦴",
     layout="wide",
 )
 
-st.markdown("""
+# ── Design tokens ─────────────────────────────────────────────────────────
+# A natural-history-museum specimen card, not a dashboard: deep moss/charcoal
+# ground, amber resin as the single warm accent, bone-white type, and a
+# monospace face reserved for the one thing in this app that is *literally*
+# a code — the DNA itself.
+BG_DEEP    = "#12160F"
+BG_PANEL   = "#1B221A"
+BG_PANEL_2 = "#212A20"
+BORDER     = "#3B4536"
+BONE       = "#EDE8D9"
+MUTED      = "#93A08C"
+AMBER      = "#C6893F"
+AMBER_HI   = "#E2A75B"
+MOSS       = "#7C9473"
+RUST       = "#B5563B"
+OCHRE      = "#D9A441"
+
+FAMILY_COLORS = {
+    "Proboscidea":    AMBER,
+    "Felidae":        "#8B7EC8",
+    "Ursidae":        RUST,
+    "Canidae":        OCHRE,
+    "Rhinocerotidae": "#5B84A6",
+    "Equidae":        MOSS,
+    "Outgroup":       MUTED,
+}
+
+st.markdown(f"""
 <style>
-.big-score { font-size: 4rem; font-weight: 700; text-align: center; line-height: 1; }
-.label     { font-size: 1rem; text-align: center; color: #888; margin-bottom: 0.5rem; }
-.family-tag{ display:inline-block; padding:3px 12px; border-radius:99px;
-             font-size:0.8rem; font-weight:500; }
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+html, body, [class*="css"] {{
+    font-family: 'Inter', sans-serif;
+}}
+.stApp {{
+    background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, #1E2A19 0%, transparent 60%),
+        {BG_DEEP};
+}}
+
+/* ── Kill the default chrome, tighten the frame ───────────────────────── */
+#MainMenu, footer, header {{ visibility: hidden; }}
+.block-container {{ padding-top: 2.2rem; max-width: 1180px; }}
+
+/* ── Type scale ────────────────────────────────────────────────────────── */
+h1, h2, h3 {{
+    font-family: 'Fraunces', serif !important;
+    color: {BONE} !important;
+    letter-spacing: -0.01em;
+}}
+p, span, div, label {{ color: {BONE}; }}
+.stCaption, [data-testid="stCaptionContainer"] {{ color: {MUTED} !important; }}
+
+/* ── Specimen letterhead ──────────────────────────────────────────────── */
+.specimen-eyebrow {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: {AMBER_HI};
+    border-top: 1px solid {BORDER};
+    border-bottom: 1px solid {BORDER};
+    padding: 7px 0;
+    margin-bottom: 1.1rem;
+    display: flex;
+    justify-content: space-between;
+}}
+.specimen-title {{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 2.6rem;
+    color: {BONE};
+    margin: 0 0 0.15rem 0;
+    line-height: 1.1;
+}}
+.specimen-sub {{
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 400;
+    color: {MUTED};
+    font-size: 1.05rem;
+    margin-bottom: 1.6rem;
+}}
+
+/* ── Tabs styled as catalog dividers ──────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 4px;
+    border-bottom: 1px solid {BORDER};
+}}
+.stTabs [data-baseweb="tab"] {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: {MUTED};
+    background: transparent;
+    padding: 10px 6px;
+}}
+.stTabs [aria-selected="true"] {{
+    color: {AMBER_HI} !important;
+    border-bottom: 2px solid {AMBER} !important;
+}}
+
+/* ── Taxonomy chip ─────────────────────────────────────────────────────── */
+.family-tag {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 11px 3px 8px;
+    border-radius: 3px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid;
+}}
+.family-dot {{ width: 6px; height: 6px; border-radius: 50%; display: inline-block; }}
+.status-tag {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: {MUTED};
+}}
+
+/* ── Specimen result card ─────────────────────────────────────────────── */
+.spec-card {{
+    position: relative;
+    background: {BG_PANEL};
+    border: 1px solid {BORDER};
+    padding: 2.4rem 2rem 2rem 2rem;
+    margin-top: 0.5rem;
+}}
+.spec-card::before, .spec-card::after,
+.spec-card .cbr, .spec-card .cbl {{
+    content: ""; position: absolute; width: 16px; height: 16px;
+    border-color: {AMBER}; border-style: solid; opacity: 0.9;
+}}
+.spec-card::before {{ top: -1px; left: -1px; border-width: 2px 0 0 2px; }}
+.spec-card::after   {{ bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }}
+.spec-card .cbr {{ top: -1px; right: -1px; border-width: 2px 2px 0 0; }}
+.spec-card .cbl {{ bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }}
+
+.spec-label {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: {MUTED};
+    text-align: center;
+    margin-bottom: 0.4rem;
+}}
+.spec-score {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 4.2rem;
+    text-align: center;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}}
+.spec-verdict {{
+    text-align: center;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 1.15rem;
+    margin-top: 0.6rem;
+    color: {BONE};
+}}
+.dna-ribbon {{
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.35em;
+    font-size: 0.68rem;
+    color: {BORDER};
+    text-align: center;
+    margin: 1.4rem 0 0.2rem 0;
+    overflow: hidden;
+    white-space: nowrap;
+}}
+
+/* ── Metrics ───────────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {{
+    background: {BG_PANEL_2};
+    border: 1px solid {BORDER};
+    padding: 0.9rem 1rem;
+}}
+[data-testid="stMetricLabel"] {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.7rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: {MUTED} !important;
+}}
+[data-testid="stMetricValue"] {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    color: {AMBER_HI} !important;
+}}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.stButton > button {{
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.82rem;
+    background: {AMBER} !important;
+    color: #12160F !important;
+    border: none !important;
+    border-radius: 2px !important;
+    font-weight: 600;
+}}
+.stButton > button:hover {{ background: {AMBER_HI} !important; }}
+
+/* ── Inputs / selects ──────────────────────────────────────────────────── */
+[data-baseweb="select"] > div, .stTextArea textarea {{
+    background: {BG_PANEL_2} !important;
+    border-color: {BORDER} !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+}}
+
+hr {{ border-color: {BORDER}; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Model definition (must match training) ───────────────────────────────────
+# ── Model definition (must match training) ───────────────────────────────
 class DNAEncoder(nn.Module):
     def __init__(self, input_dim=4096, embed_dim=128):
         super().__init__()
@@ -55,7 +269,7 @@ class SiameseDNA(nn.Module):
         e1, e2 = self.encoder(x1), self.encoder(x2)
         return (e1 * e2).sum(dim=1), e1, e2
 
-# ── Load model + data ─────────────────────────────────────────────────────────
+# ── Load model + data ──────────────────────────────────────────────────────
 @st.cache_resource
 def load_model_and_data():
     df = pd.read_csv("kmer_vectors.csv", index_col="species")
@@ -67,7 +281,7 @@ def load_model_and_data():
 
 model, vectors, species_list = load_model_and_data()
 
-# ── K-mer helper (for pasting raw sequences) ─────────────────────────────────
+# ── K-mer helper (for pasting raw sequences) ──────────────────────────────
 def seq_to_vector(sequence, k=6):
     sequence = re.sub(r'[^ATGC]', '', sequence.upper())
     kmers = [''.join(p) for p in product('ATGC', repeat=k)]
@@ -80,7 +294,7 @@ def seq_to_vector(sequence, k=6):
     if total > 0: counts /= total
     return counts
 
-# ── Predict ───────────────────────────────────────────────────────────────────
+# ── Predict ────────────────────────────────────────────────────────────────
 def predict(v1, v2):
     model.eval()
     with torch.no_grad():
@@ -89,7 +303,7 @@ def predict(v1, v2):
         sim, _, _ = model(t1, t2)
         return float(sim.item())
 
-# ── Family metadata ───────────────────────────────────────────────────────────
+# ── Family / extinction metadata ─────────────────────────────────────────
 FAMILY = {
     "woolly_mammoth":"Proboscidea","columbian_mammoth":"Proboscidea",
     "american_mastodon":"Proboscidea","asian_elephant":"Proboscidea",
@@ -112,56 +326,69 @@ EXTINCT = {
     "woolly_mammoth","columbian_mammoth","american_mastodon","saber_tooth_cat",
     "cave_lion","cave_bear","dire_wolf","woolly_rhinoceros",
 }
-FAMILY_COLORS = {
-    "Proboscidea":"#1D9E75","Felidae":"#7F77DD","Ursidae":"#D85A30",
-    "Canidae":"#EF9F27","Rhinocerotidae":"#378ADD","Equidae":"#3BAA5C","Outgroup":"#888780",
-}
 
 def score_label(s):
-    if s >= 0.85: return "Very closely related 🟢", "#1D9E75"
-    if s >= 0.70: return "Related 🟡", "#EF9F27"
-    if s >= 0.50: return "Distantly related 🟠", "#D85A30"
-    return "Not related 🔴", "#A32D2D"
+    if s >= 0.85: return "Very closely related", MOSS
+    if s >= 0.70: return "Related", OCHRE
+    if s >= 0.50: return "Distantly related", AMBER
+    return "Not related", RUST
 
 def format_name(n): return n.replace("_", " ").title()
 
-# ─────────────────────────────────────────────────────────────────────────────
+def catalog_no(name):
+    """Deterministic pseudo-catalog number, purely decorative."""
+    h = int(hashlib.md5(name.encode()).hexdigest(), 16) % 9000 + 1000
+    return f"SPEC-{h}"
+
+def family_chip(species):
+    fam = FAMILY.get(species, "Unknown")
+    color = FAMILY_COLORS.get(fam, MUTED)
+    status = "EXTINCT" if species in EXTINCT else "EXTANT"
+    return f"""
+    <span class="family-tag" style="border-color:{color}55;color:{color};background:{color}14">
+        <span class="family-dot" style="background:{color}"></span>{fam}
+    </span>
+    &nbsp;&nbsp;<span class="status-tag">{'🦴' if status=='EXTINCT' else '🌿'} {status}</span>
+    """
+
+# ─────────────────────────────────────────────────────────────────────────
 # UI
-# ─────────────────────────────────────────────────────────────────────────────
-st.title("🦣 Extinct Animal DNA Similarity")
-st.caption("A Siamese neural network trained on mitochondrial DNA from NCBI GenBank")
+# ─────────────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="specimen-eyebrow"><span>FIELD COLLECTION · MITOCHONDRIAL DNA</span><span>SIAMESE NEURAL COMPARATOR v2</span></div>
+<div class="specimen-title">Extinct Animal DNA Similarity</div>
+<div class="specimen-sub">A Siamese neural network trained on mitochondrial sequences from NCBI GenBank, estimating evolutionary kinship between specimens living and long gone.</div>
+""", unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["🔬 Compare two species", "🌳 Phylogenetic tree", "📊 Full similarity matrix"])
+tab1, tab2, tab3 = st.tabs(["🔬  COMPARE SPECIMENS", "🌳  PHYLOGENETIC TREE", "📊  SIMILARITY MATRIX"])
 
-# ── Tab 1: Compare ────────────────────────────────────────────────────────────
+# ── Tab 1: Compare ──────────────────────────────────────────────────────
 with tab1:
-    mode = st.radio("Input mode", ["Choose from database", "Paste raw DNA sequence"], horizontal=True)
-    st.divider()
+    mode = st.radio("Input mode", ["Choose from database", "Paste raw DNA sequence"], horizontal=True, label_visibility="collapsed")
+    st.write("")
 
     col1, col2 = st.columns(2)
 
     if mode == "Choose from database":
         with col1:
-            s1 = st.selectbox("Species 1", species_list, index=species_list.index("woolly_mammoth") if "woolly_mammoth" in species_list else 0, format_func=format_name)
-            f1 = FAMILY.get(s1, "Unknown")
-            e1 = "🦴 Extinct" if s1 in EXTINCT else "🌿 Living"
-            st.markdown(f'<span class="family-tag" style="background:{FAMILY_COLORS.get(f1, "#888")}22;color:{FAMILY_COLORS.get(f1, "#888")}">{f1}</span> &nbsp; {e1}', unsafe_allow_html=True)
+            s1 = st.selectbox("Specimen 1", species_list, index=species_list.index("woolly_mammoth") if "woolly_mammoth" in species_list else 0, format_func=format_name)
+            st.caption(f"Catalog {catalog_no(s1)}")
+            st.markdown(family_chip(s1), unsafe_allow_html=True)
             v1 = vectors[s1]
 
         with col2:
             default2 = "asian_elephant" if "asian_elephant" in species_list else species_list[1]
-            s2 = st.selectbox("Species 2", species_list, index=species_list.index(default2), format_func=format_name)
-            f2 = FAMILY.get(s2, "Unknown")
-            e2 = "🦴 Extinct" if s2 in EXTINCT else "🌿 Living"
-            st.markdown(f'<span class="family-tag" style="background:{FAMILY_COLORS.get(f2, "#888")}22;color:{FAMILY_COLORS.get(f2, "#888")}">{f2}</span> &nbsp; {e2}', unsafe_allow_html=True)
+            s2 = st.selectbox("Specimen 2", species_list, index=species_list.index(default2), format_func=format_name)
+            st.caption(f"Catalog {catalog_no(s2)}")
+            st.markdown(family_chip(s2), unsafe_allow_html=True)
             v2 = vectors[s2]
     else:
         with col1:
-            st.markdown("**Species 1** — paste FASTA or raw sequence")
-            seq1 = st.text_area("Sequence 1", height=150, placeholder=">species_name\nATCGATCGATCG...")
+            st.markdown("**Specimen 1** — paste FASTA or raw sequence")
+            seq1 = st.text_area("Sequence 1", height=150, placeholder=">species_name\nATCGATCGATCG...", label_visibility="collapsed")
         with col2:
-            st.markdown("**Species 2** — paste FASTA or raw sequence")
-            seq2 = st.text_area("Sequence 2", height=150, placeholder=">species_name\nATCGATCGATCG...")
+            st.markdown("**Specimen 2** — paste FASTA or raw sequence")
+            seq2 = st.text_area("Sequence 2", height=150, placeholder=">species_name\nATCGATCGATCG...", label_visibility="collapsed")
 
         if seq1 and seq2:
             raw1 = '\n'.join(l for l in seq1.strip().splitlines() if not l.startswith('>'))
@@ -173,16 +400,26 @@ with tab1:
             st.info("Paste both sequences to compare.")
             st.stop()
 
-    st.divider()
-    if st.button("🔬 Run comparison", type="primary", use_container_width=True):
+    st.write("")
+    run = st.button("RUN COMPARISON", type="primary", use_container_width=True)
+    st.write("")
+
+    if run:
         score = predict(v1, v2)
         label, color = score_label(score)
+        ribbon = " ".join(np.random.choice(list("ATGC"), 48))
 
-        st.markdown(f'<p class="label">Evolutionary similarity</p>', unsafe_allow_html=True)
-        st.markdown(f'<p class="big-score" style="color:{color}">{score*100:.1f}%</p>', unsafe_allow_html=True)
-        st.markdown(f'<p style="text-align:center;font-size:1.1rem;margin-top:0.5rem">{label}</p>', unsafe_allow_html=True)
-        st.divider()
+        st.markdown(f"""
+        <div class="spec-card">
+            <span class="cbr"></span><span class="cbl"></span>
+            <div class="spec-label">Evolutionary Similarity Index</div>
+            <div class="spec-score" style="color:{color}">{score*100:.1f}%</div>
+            <div class="spec-verdict">"{label}" — {format_name(s1)} × {format_name(s2)}</div>
+            <div class="dna-ribbon">{ribbon}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
+        st.write("")
         c1, c2, c3 = st.columns(3)
         baseline = float(np.dot(v1,v2)/(np.linalg.norm(v1)*np.linalg.norm(v2)+1e-8))
         c1.metric("Model score",    f"{score*100:.1f}%")
@@ -191,14 +428,18 @@ with tab1:
 
         if mode == "Choose from database":
             same = FAMILY.get(s1,"?") == FAMILY.get(s2,"?")
-            st.info(
-                f"**{format_name(s1)}** ({FAMILY.get(s1,'?')}) and **{format_name(s2)}** ({FAMILY.get(s2,'?')}) "
-                + ("belong to the **same evolutionary family**." if same else "belong to **different families**.")
-            )
+            st.write("")
+            st.markdown(f"""
+            <div style="border-left:2px solid {AMBER};padding:0.7rem 1rem;background:{BG_PANEL_2};font-family:'Inter',sans-serif;color:{BONE}">
+            <b>{format_name(s1)}</b> <span style="color:{MUTED}">({FAMILY.get(s1,'?')})</span> and
+            <b>{format_name(s2)}</b> <span style="color:{MUTED}">({FAMILY.get(s2,'?')})</span>
+            {"belong to the <b style='color:%s'>same evolutionary family</b>." % MOSS if same else "belong to <b style='color:%s'>different families</b>." % RUST}
+            </div>
+            """, unsafe_allow_html=True)
 
-# ── Tab 2: Phylogenetic tree ───────────────────────────────────────────────────
+# ── Tab 2: Phylogenetic tree ─────────────────────────────────────────────
 with tab2:
-    st.subheader("Phylogenetic dendrogram — learned by the model")
+    st.markdown("### Phylogenetic dendrogram — learned by the model")
     st.caption("Computed from pairwise Siamese similarity scores across all species in the database")
 
     selected_families = st.multiselect(
@@ -229,45 +470,41 @@ with tab2:
         Z = linkage(condensed, method='average')
 
         fig, ax = plt.subplots(figsize=(10, max(5, len(show_species)*0.38)))
-        fig.patch.set_facecolor('#0f1117')
-        ax.set_facecolor('#0f1117')
+        fig.patch.set_facecolor(BG_DEEP)
+        ax.set_facecolor(BG_DEEP)
 
         labels = [
-            ("🦴 " if s in EXTINCT else "🌿 ") + format_name(s)
+            ("\U0001F9B4 " if s in EXTINCT else "\U0001F33F ") + format_name(s)
             for s in show_species
         ]
-        leaf_colors = {
-            labels[i]: FAMILY_COLORS.get(FAMILY.get(show_species[i],"Outgroup"), "#888")
-            for i in range(len(show_species))
-        }
 
         dn = dendrogram(Z, labels=labels, orientation='left', ax=ax,
                         leaf_font_size=8,
-                        link_color_func=lambda k: '#c2c0b6')
+                        link_color_func=lambda k: AMBER)
 
-        ax.set_xlabel("Evolutionary distance (1 − similarity)", color='#888780', fontsize=9)
-        ax.tick_params(colors='#c2c0b6', labelsize=8)
-        for sp in ax.spines.values(): sp.set_edgecolor('#444441')
+        ax.set_xlabel("Evolutionary distance (1 − similarity)", color=MUTED, fontsize=9)
+        ax.tick_params(colors=BONE, labelsize=8)
+        for sp in ax.spines.values(): sp.set_edgecolor(BORDER)
 
         yticklabels = ax.get_yticklabels()
         for lbl in yticklabels:
             txt = lbl.get_text()
-            clean = txt.replace("🦴 ","").replace("🌿 ","")
+            clean = txt.replace("\U0001F9B4 ","").replace("\U0001F33F ","")
             sp_name = clean.lower().replace(" ","_")
-            color = FAMILY_COLORS.get(FAMILY.get(sp_name,"Outgroup"),"#888")
+            color = FAMILY_COLORS.get(FAMILY.get(sp_name,"Outgroup"), MUTED)
             lbl.set_color(color)
 
         legend_handles = [mpatches.Patch(color=c, label=f) for f,c in FAMILY_COLORS.items()]
-        ax.legend(handles=legend_handles, fontsize=7, facecolor='#1a1d27',
-                  edgecolor='#444441', labelcolor='#c2c0b6', loc='lower right')
+        ax.legend(handles=legend_handles, fontsize=7, facecolor=BG_PANEL,
+                  edgecolor=BORDER, labelcolor=BONE, loc='lower right')
 
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
         st.caption("Species that cluster together are predicted to share evolutionary ancestry. Leaf colors = taxonomic family. 🦴 = extinct species.")
 
-# ── Tab 3: Full matrix ────────────────────────────────────────────────────────
+# ── Tab 3: Full matrix ────────────────────────────────────────────────────
 with tab3:
-    st.subheader("Pairwise similarity matrix")
+    st.markdown("### Pairwise similarity matrix")
     fam_filter = st.multiselect("Filter families", list(FAMILY_COLORS.keys()),
                                 default=["Proboscidea","Felidae","Ursidae"])
     filtered = [s for s in species_list if FAMILY.get(s,"Outgroup") in fam_filter]
@@ -285,9 +522,12 @@ with tab3:
                 rows.append(row)
             mat_df = pd.DataFrame(rows, index=[format_name(s) for s in filtered])
 
+        # Rust → ochre → moss: matches the app's own "not related → related" language.
+        specimen_cmap = LinearSegmentedColormap.from_list("specimen", [RUST, OCHRE, MOSS])
+
         st.dataframe(
-            mat_df.style.background_gradient(cmap='RdYlGn', vmin=0.3, vmax=1.0)
+            mat_df.style.background_gradient(cmap=specimen_cmap, vmin=0.3, vmax=1.0)
                         .format("{:.3f}"),
             use_container_width=True
         )
-        st.caption("Green = high similarity (closely related). Red = low similarity (distant). Download via the table's built-in export button.")
+        st.caption("Moss green = high similarity (closely related). Rust = low similarity (distant). Download via the table's built-in export button.")
