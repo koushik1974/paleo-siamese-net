@@ -1,18 +1,3 @@
-"""
-Stage 2: DNA FASTA → K-mer Frequency Vectors
-=============================================
-Converts raw FASTA sequences into fixed-size numeric vectors
-suitable for training a Siamese neural network.
-
-Usage:
-    pip install biopython numpy pandas scikit-learn matplotlib seaborn
-    python preprocess_dna.py
-
-Output:
-    kmer_vectors.csv      — shape (n_species, 4096) — your ML dataset
-    kmer_visualization.png — similarity heatmap + PCA scatter
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -23,28 +8,18 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
-K = 6           # k-mer length. 4^6 = 4096 features. Try 4 or 5 for shorter seqs.
+K = 6          
 FASTA_DIR = "dna_sequences"
 OUTPUT_CSV = "kmer_vectors.csv"
 
 
-# ── STEP 1: Build k-mer vocabulary ───────────────────────────────────────────
+
 def get_all_kmers(k):
     """All 4^k possible DNA k-mers."""
     return [''.join(p) for p in product('ATGC', repeat=k)]
 
-
-# ── STEP 2: Convert one sequence to a normalized frequency vector ─────────────
 def sequence_to_kmer_vector(sequence, k=6):
-    """
-    Sliding window of size k over the sequence.
-    Returns L1-normalized frequency array of shape (4^k,).
-
-    Why L1 normalize? So two sequences of different lengths are still
-    comparable — we care about *patterns*, not raw counts.
-    """
-    sequence = sequence.upper().replace('N', '')   # remove ambiguous bases
+    sequence = sequence.upper().replace('N', '')  
     kmers = get_all_kmers(k)
     kmer_index = {km: i for i, km in enumerate(kmers)}
     counts = np.zeros(len(kmers), dtype=np.float32)
@@ -56,12 +31,12 @@ def sequence_to_kmer_vector(sequence, k=6):
 
     total = counts.sum()
     if total > 0:
-        counts /= total      # L1 normalize → frequency
+        counts /= total     
 
     return counts, kmers
 
 
-# ── STEP 3: Load all FASTA files ─────────────────────────────────────────────
+
 print(f"Loading sequences and computing {K}-mer vectors (4^{K} = {4**K} features)...\n")
 print(f"{'Species':<25} {'Length':>12} {'Vector size':>12} {'Unique k-mers':>14}")
 print("-" * 65)
@@ -81,7 +56,6 @@ for fname in sorted(os.listdir(FASTA_DIR)):
     print(f"  {name:<23} {len(seq):>12,} {len(vec):>12,} {unique:>14,}")
 
 
-# ── STEP 4: Save as CSV ───────────────────────────────────────────────────────
 df = pd.DataFrame(vectors, index=kmer_labels).T
 df.index.name = "species"
 df.to_csv(OUTPUT_CSV)
@@ -90,7 +64,6 @@ print(f"  rows = species, columns = k-mer frequencies")
 print(f"  Each row is one training sample for your Siamese network.\n")
 
 
-# ── STEP 5: Compute cosine similarity matrix ──────────────────────────────────
 names = list(vectors.keys())
 n = len(names)
 sim_matrix = np.zeros((n, n))
@@ -115,11 +88,11 @@ for a, b, note in pairs:
         print(f"  {a:<22} vs {b:<22} → {sim:.4f}  ({note})")
 
 
-# ── STEP 6: Visualize ─────────────────────────────────────────────────────────
+
 fig, axes = plt.subplots(1, 2, figsize=(18, 7))
 fig.patch.set_facecolor('#0f1117')
 
-# Heatmap
+
 ax1 = axes[0]
 im = ax1.imshow(sim_matrix, cmap='RdYlGn', vmin=0.8, vmax=1.0, aspect='auto')
 plt.colorbar(im, ax=ax1, fraction=0.046, pad=0.04).set_label('cosine similarity', color='#c2c0b6')
@@ -136,7 +109,7 @@ for i in range(n):
         ax1.text(j, i, f'{sim_matrix[i,j]:.2f}', ha='center', va='center',
                  fontsize=5.5, color='white' if sim_matrix[i,j] < 0.92 else 'black')
 
-# PCA scatter
+
 ax2 = axes[1]
 mat = np.array([vectors[nm] for nm in names])
 pca = PCA(n_components=2)
@@ -178,4 +151,3 @@ for spine in ax2.spines.values(): spine.set_edgecolor('#444441')
 plt.tight_layout(pad=2)
 plt.savefig("kmer_visualization.png", dpi=150, bbox_inches='tight', facecolor='#0f1117')
 print("\nVisualization saved: kmer_visualization.png")
-print("\nNext step: feed kmer_vectors.csv into your Siamese network (Stage 3).")

@@ -1,15 +1,3 @@
-"""
-Stage 3: Siamese Neural Network for DNA Sequence Similarity
-============================================================
-Input:  kmer_vectors.csv  (output of preprocess_dna.py)
-Output: siamese_dna_model.pt  — saved model weights
-        siamese_training.png  — training curves + embedding space
-
-Usage:
-    pip install torch numpy pandas scikit-learn matplotlib
-    python siamese_dna.py
-"""
-
 import numpy as np
 import pandas as pd
 import torch
@@ -23,7 +11,6 @@ import random, os
 
 random.seed(42); np.random.seed(42); torch.manual_seed(42)
 
-# ── 1. Load data ──────────────────────────────────────────────────────────────
 df = pd.read_csv("kmer_vectors.csv", index_col="species")
 species_names = list(df.index)
 vectors = {n: df.loc[n].values.astype(np.float32) for n in species_names}
@@ -44,8 +31,6 @@ def get_group(sp):
 def cosine_sim(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
 
-
-# ── 2. Build pairs with evolutionary labels ───────────────────────────────────
 def build_pairs(vectors, species_names):
     pairs = []
     for s1, s2 in combinations(species_names, 2):
@@ -75,7 +60,6 @@ split = int(0.8 * len(aug_pairs))
 train_pairs, val_pairs = aug_pairs[:split], aug_pairs[split:]
 
 
-# ── 3. Dataset ────────────────────────────────────────────────────────────────
 class DNAPairDataset(Dataset):
     def __init__(self, pairs, vectors):
         self.pairs = pairs; self.vectors = vectors
@@ -90,8 +74,6 @@ class DNAPairDataset(Dataset):
 train_loader = DataLoader(DNAPairDataset(train_pairs, vectors), batch_size=32, shuffle=True)
 val_loader   = DataLoader(DNAPairDataset(val_pairs,   vectors), batch_size=32, shuffle=False)
 
-
-# ── 4. Model ──────────────────────────────────────────────────────────────────
 class DNAEncoder(nn.Module):
     """
     Shared encoder tower used by both branches of the Siamese network.
@@ -106,7 +88,7 @@ class DNAEncoder(nn.Module):
             nn.Linear(128, embed_dim),
         )
     def forward(self, x):
-        return F.normalize(self.net(x), p=2, dim=1)   # L2 norm → unit sphere
+        return F.normalize(self.net(x), p=2, dim=1)   
 
 class SiameseDNA(nn.Module):
     """
@@ -120,14 +102,13 @@ class SiameseDNA(nn.Module):
     def forward(self, x1, x2):
         e1 = self.encoder(x1)
         e2 = self.encoder(x2)
-        similarity = (e1 * e2).sum(dim=1)   # dot product of unit vectors = cosine sim
+        similarity = (e1 * e2).sum(dim=1)   
         return similarity, e1, e2
 
 model = SiameseDNA(input_dim=df.shape[1])
 print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}\n")
 
 
-# ── 5. Loss functions ─────────────────────────────────────────────────────────
 def contrastive_loss(sim, label, margin=0.3):
     """
     Related pairs   (label=1): penalise if sim < 1  → push embeddings together
@@ -141,7 +122,6 @@ def combined_loss(pred, true_sim, label, alpha=0.6):
     return alpha * contrastive_loss(pred, label) + (1 - alpha) * F.mse_loss(pred, true_sim)
 
 
-# ── 6. Training loop ──────────────────────────────────────────────────────────
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=80)
 
@@ -190,8 +170,6 @@ model.load_state_dict(best_state)
 torch.save(model.state_dict(), "siamese_dna_model.pt")
 print(f"\nSaved: siamese_dna_model.pt")
 
-
-# ── 7. Inference helper ───────────────────────────────────────────────────────
 def predict_similarity(species1, species2):
     """
     Given two species names (must be in kmer_vectors.csv),

@@ -1,17 +1,3 @@
-"""
-Stage 3 v2: Siamese Network — fixed for real NCBI data
-=======================================================
-Key fixes over v1:
-  1. Weighted sampling  — balances same-family vs different-family pairs
-  2. Larger margin      — forces clearer separation between related/unrelated
-  3. Harder negatives   — mines pairs that are close but SHOULD be far apart
-  4. More epochs        — real DNA needs longer to converge
-  5. Stricter threshold — 0.65 cutoff instead of 0.5 for classification
-
-Usage:
-    python siamese_dna_v2.py
-"""
-
 import numpy as np
 import pandas as pd
 import torch
@@ -27,14 +13,12 @@ import random
 
 random.seed(42); np.random.seed(42); torch.manual_seed(42)
 
-# ── 1. Load ───────────────────────────────────────────────────────────────────
 df = pd.read_csv("kmer_vectors.csv", index_col="species")
 species_names = list(df.index)
 vectors = {n: df.loc[n].values.astype(np.float32) for n in species_names}
 input_dim = df.shape[1]
 print(f"Loaded {len(vectors)} species, {input_dim} features\n")
 
-# Evolutionary groups — add any new species from your 17 here
 GROUPS = {
     "proboscidea": {"woolly_mammoth","american_mastodon","asian_elephant","african_elephant",
                     "columbian_mammoth"},
@@ -54,16 +38,6 @@ def get_group(sp):
 
 def cosine_sim(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
-
-
-# ── 2. Build pairs with CONTINUOUS similarity target ─────────────────────────
-#
-# Key insight: instead of a binary label, we use a 3-level target:
-#   1.0 = same family         (mammoth + elephant)
-#   0.3 = related order       (mammoth + rhino — both large herbivores)
-#   0.0 = completely unrelated (mammoth + chicken)
-#
-# This gives the model richer signal than just 0/1.
 
 SAME_ORDER_PAIRS = {
     frozenset({"felidae",  "ursidae"}),
@@ -90,8 +64,6 @@ mid  = sum(1 for *_, l in all_pairs if l == 0.3)
 diff = sum(1 for *_, l in all_pairs if l == 0.0)
 print(f"Pairs — same family: {same}  related order: {mid}  unrelated: {diff}")
 
-
-# ── 3. Augmentation ───────────────────────────────────────────────────────────
 def augment(pairs, vectors, n_aug=15):
     aug = list(pairs)
     for i in range(n_aug):
@@ -110,7 +82,6 @@ split = int(0.8 * len(aug_pairs))
 train_pairs, val_pairs = aug_pairs[:split], aug_pairs[split:]
 
 
-# ── 4. Weighted sampler to fix class imbalance ────────────────────────────────
 class DNAPairDataset(Dataset):
     def __init__(self, pairs, vectors):
         self.pairs = pairs; self.vectors = vectors
@@ -130,8 +101,6 @@ train_loader = DataLoader(DNAPairDataset(train_pairs, vectors), batch_size=64, s
 val_loader   = DataLoader(DNAPairDataset(val_pairs,   vectors), batch_size=64, shuffle=False)
 print(f"Train: {len(train_pairs):,}  Val: {len(val_pairs):,}\n")
 
-
-# ── 5. Model ──────────────────────────────────────────────────────────────────
 class DNAEncoder(nn.Module):
     def __init__(self, input_dim=4096, embed_dim=128):
         super().__init__()
@@ -155,7 +124,6 @@ model = SiameseDNA(input_dim=input_dim, embed_dim=128)
 print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}\n")
 
 
-# ── 6. Loss — larger margin forces real separation ────────────────────────────
 def contrastive_loss(sim, label, margin=0.5):
     pos = label       * (1 - sim).pow(2)
     neg = (1 - label) * F.relu(sim - margin).pow(2)
@@ -164,8 +132,6 @@ def contrastive_loss(sim, label, margin=0.5):
 def combined_loss(pred, true_sim, label, alpha=0.7):
     return alpha * contrastive_loss(pred, label) + (1 - alpha) * F.mse_loss(pred, true_sim)
 
-
-# ── 7. Training ───────────────────────────────────────────────────────────────
 EPOCHS    = 150
 THRESHOLD = 0.65
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4, weight_decay=1e-4)
@@ -215,8 +181,6 @@ model.load_state_dict(best_state)
 torch.save(model.state_dict(), "siamese_dna_model_v2.pt")
 print(f"\nBest val loss: {best_val:.4f} → saved siamese_dna_model_v2.pt\n")
 
-
-# ── 8. Evaluate ───────────────────────────────────────────────────────────────
 def predict(s1, s2):
     model.eval()
     with torch.no_grad():
@@ -245,8 +209,6 @@ for s1, s2, exp in test:
         flag = "✓" if (exp == "HIGH" and p > 0.7) or (exp in ("LOW","VERY LOW") and p < 0.5) else "?"
         print(f"  {s1+' vs '+s2:<45}  {p:>7.4f}  {b:>9.4f}  {exp}  {flag}")
 
-
-# ── 9. Plot ───────────────────────────────────────────────────────────────────
 fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 fig.patch.set_facecolor('#0f1117')
 
@@ -305,4 +267,3 @@ for sp in ax.spines.values(): sp.set_edgecolor('#444441')
 plt.tight_layout(pad=2)
 plt.savefig("siamese_training_v2.png", dpi=150, bbox_inches='tight', facecolor='#0f1117')
 print("\nPlot saved: siamese_training_v2.png")
-print("Next: build the Streamlit demo app (Stage 5)")
